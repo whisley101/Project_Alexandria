@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: book-rag-app
+    runtime: python
+    plan: free
+    region: virginia
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.address 0.0.0.0 --server.port $PORT
+    envVars:
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX_NAME
+        sync: false
+      - key: TOGETHER_API_KEY
+        sync: false
