@@ -61,6 +61,18 @@ Streamlit will print a local URL, usually:
 http://localhost:8501
 ```
 
+## One-Click Launcher
+
+You can also launch the app from:
+
+[`launch_app.command`](/Users/nathanrandall/Documents/Project_Alexandria/launch_app.command)
+
+After dependencies are installed, double-clicking that file in Finder will:
+
+- activate the local virtual environment
+- start Streamlit
+- open the app in your browser
+
 ## Notes
 
 - The Pinecone index is created automatically if it does not already exist.
