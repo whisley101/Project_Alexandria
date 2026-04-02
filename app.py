@@ -4,6 +4,7 @@ import os
 import tempfile
 
 import streamlit as st
+from dotenv import load_dotenv
 
 from embeddings import embed_query
 from ingest import ingest_book
@@ -12,6 +13,7 @@ from utils import truncate
 from vector_store import get_all_books, query_chunks
 
 
+load_dotenv()
 st.set_page_config(page_title="Book Query App", page_icon="📚", layout="wide")
 
 
