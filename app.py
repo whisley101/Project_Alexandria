@@ -49,15 +49,29 @@ def main() -> None:
             else:
                 suffix = os.path.splitext(uploaded_file.name)[1] or ".epub"
                 temp_path = None
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
 
                 try:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
                         temp_file.write(uploaded_file.getbuffer())
                         temp_path = temp_file.name
 
-                    with st.spinner("Extracting text, chunking, embedding, and indexing..."):
-                        result = ingest_book(temp_path, book_title=book_title or uploaded_file.name.rsplit(".", 1)[0])
+                    def update_ingestion_progress(stage: str, processed: int, total: int, message: str) -> None:
+                        if total <= 0:
+                            progress_bar.progress(0)
+                        else:
+                            progress_bar.progress(min(processed / total, 1.0))
+                        progress_text.caption(message)
 
+                    result = ingest_book(
+                        temp_path,
+                        book_title=book_title or uploaded_file.name.rsplit(".", 1)[0],
+                        progress_callback=update_ingestion_progress,
+                    )
+
+                    progress_bar.progress(1.0)
+                    progress_text.caption(f"Finished indexing {result['chunk_count']} chunks.")
                     st.success(
                         f"Indexed '{result['book_title']}' with {result['chunk_count']} chunks."
                     )

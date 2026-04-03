@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional
 
 from bs4 import BeautifulSoup
 from ebooklib import ITEM_DOCUMENT, epub
@@ -61,16 +61,42 @@ def chunk_text(text: str, chunk_size: int = WORDS_PER_CHUNK, overlap: int = OVER
     return chunks
 
 
-def ingest_book(epub_path: str, book_title: str | None = None) -> Dict:
+def ingest_book(
+    epub_path: str,
+    book_title: str | None = None,
+    progress_callback: Optional[Callable[[str, int, int, str], None]] = None,
+) -> Dict:
     resolved_title = book_title or Path(epub_path).stem
+    if progress_callback:
+        progress_callback("extracting", 0, 1, "Extracting text from EPUB...")
+
     text = extract_text(epub_path)
+    if progress_callback:
+        progress_callback("chunking", 0, 1, "Chunking extracted text...")
+
     chunks = chunk_text(text)
 
     if not chunks:
         raise ValueError("No readable text was extracted from the EPUB.")
 
+    if progress_callback:
+        progress_callback("chunking", len(chunks), len(chunks), f"Created {len(chunks)} chunks.")
+
     chunk_texts = [chunk["text"] for chunk in chunks]
-    embeddings = embed_texts(chunk_texts)
+    if progress_callback:
+        progress_callback("embedding", 0, len(chunks), f"Generating embeddings for 0/{len(chunks)} chunks...")
+
+    embeddings = embed_texts(
+        chunk_texts,
+        progress_callback=lambda processed, total: progress_callback(
+            "embedding",
+            processed,
+            total,
+            f"Generating embeddings for {processed}/{total} chunks...",
+        )
+        if progress_callback
+        else None,
+    )
     namespace = slugify(resolved_title)
 
     metadata = [
@@ -83,7 +109,26 @@ def ingest_book(epub_path: str, book_title: str | None = None) -> Dict:
         for chunk in chunks
     ]
 
-    upsert_chunks(chunks=chunks, embeddings=embeddings, metadata=metadata, namespace=namespace)
+    if progress_callback:
+        progress_callback("upserting", 0, len(chunks), f"Uploading 0/{len(chunks)} chunks to Pinecone...")
+
+    upsert_chunks(
+        chunks=chunks,
+        embeddings=embeddings,
+        metadata=metadata,
+        namespace=namespace,
+        progress_callback=lambda processed, total: progress_callback(
+            "upserting",
+            processed,
+            total,
+            f"Uploading {processed}/{total} chunks to Pinecone...",
+        )
+        if progress_callback
+        else None,
+    )
+
+    if progress_callback:
+        progress_callback("complete", len(chunks), len(chunks), f"Finished indexing {len(chunks)} chunks.")
 
     return {
         "book_title": resolved_title,

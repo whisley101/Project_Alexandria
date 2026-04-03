@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional
 
 from pinecone import ServerlessSpec
 from pinecone.grpc import PineconeGRPC as Pinecone
@@ -13,6 +13,7 @@ BOOK_REGISTRY_NAMESPACE = "__books__"
 UPSERT_BATCH_SIZE = 100
 DEFAULT_PINECONE_CLOUD = "aws"
 DEFAULT_PINECONE_REGION = "us-east-1"
+BOOK_REGISTRY_SENTINEL_VALUE = 1e-12
 
 
 def get_index():
@@ -43,7 +44,8 @@ def _book_registry_vector(book_title: str) -> Dict:
     vector_dimension = embedding_dimension()
     return {
         "id": f"book::{slugify(book_title)}",
-        "values": [0.0] * vector_dimension,
+        # Pinecone rejects dense vectors that are entirely zero.
+        "values": [BOOK_REGISTRY_SENTINEL_VALUE] * vector_dimension,
         "metadata": {
             "book": book_title,
             "kind": "book_registry",
@@ -56,6 +58,7 @@ def upsert_chunks(
     embeddings: List[List[float]],
     metadata: List[Dict],
     namespace: str,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
 ) -> None:
     if not chunks:
         return
@@ -72,8 +75,13 @@ def upsert_chunks(
             }
         )
 
+    total_vectors = len(vectors)
+    upserted = 0
     for batch in batched(vectors, UPSERT_BATCH_SIZE):
         index.upsert(vectors=list(batch), namespace=namespace)
+        upserted += len(batch)
+        if progress_callback:
+            progress_callback(upserted, total_vectors)
 
     book_title = metadata[0]["book"]
     index.upsert(vectors=[_book_registry_vector(book_title)], namespace=BOOK_REGISTRY_NAMESPACE)
