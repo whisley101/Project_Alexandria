@@ -1,11 +1,11 @@
 from typing import Dict, List
 
-from together import Together
+from openai import OpenAI
 
-from utils import require_env, truncate
+from utils import require_env
 
 
-DEFAULT_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+DEFAULT_MODEL = "gpt-5.4-nano"
 MAX_CONTEXT_CHARS = 12000
 
 
@@ -32,8 +32,8 @@ def generate_answer(query: str, contexts: List[Dict], model: str = DEFAULT_MODEL
     if not contexts:
         return "No relevant sections were found for that question."
 
-    api_key = require_env("TOGETHER_API_KEY")
-    client = Together(api_key=api_key)
+    api_key = require_env("OPENAI_API_KEY")
+    client = OpenAI(api_key=api_key)
     prompt = (
         "You are answering questions about a book.\n\n"
         "Use ONLY the context below.\n\n"
@@ -45,17 +45,24 @@ def generate_answer(query: str, contexts: List[Dict], model: str = DEFAULT_MODEL
         f"Question:\n{query}"
     )
 
-    response = client.chat.completions.create(
+    response = client.responses.create(
         model=model,
-        messages=[
+        input=[
             {
-                "role": "system",
-                "content": "Answer strictly from the supplied context. If the answer is not in the context, say so clearly.",
+                "role": "developer",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": "Answer strictly from the supplied context. If the answer is not in the context, say so clearly.",
+                    }
+                ],
             },
-            {"role": "user", "content": prompt},
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": prompt}],
+            },
         ],
-        temperature=0.2,
-        max_tokens=700,
+        max_output_tokens=700,
     )
 
-    return response.choices[0].message.content.strip()
+    return response.output_text.strip()

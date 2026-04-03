@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Optional
 from bs4 import BeautifulSoup
 from ebooklib import ITEM_DOCUMENT, epub
 
-from embeddings import embed_texts
+from embeddings import MODEL_NAME, embed_texts
 from utils import compact_whitespace, slugify
 from vector_store import upsert_chunks
 
@@ -105,6 +105,7 @@ def ingest_book(
             "chunk_id": chunk["chunk_id"],
             "text": chunk["text"],
             "page_estimate": chunk["page_estimate"],
+            "embedding_model": MODEL_NAME,
         }
         for chunk in chunks
     ]

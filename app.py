@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -20,7 +21,7 @@ st.set_page_config(page_title="Book Query App", page_icon="📚", layout="wide")
 def render_env_help() -> None:
     missing = [
         name
-        for name in ["PINECONE_API_KEY", "TOGETHER_API_KEY", "PINECONE_INDEX_NAME"]
+        for name in ["PINECONE_API_KEY", "OPENAI_API_KEY", "PINECONE_INDEX_NAME"]
         if not os.getenv(name)
     ]
     if missing:
@@ -34,6 +35,10 @@ def render_env_help() -> None:
 def main() -> None:
     st.title("📚 Book Query App")
     st.caption("Upload EPUBs, index them in Pinecone, and ask focused questions about a selected book.")
+    st.info(
+        "This app now uses Pinecone-hosted `llama-text-embed-v2` embeddings. "
+        "Any books indexed with the older local embedding model need to be re-ingested."
+    )
     render_env_help()
 
     left_col, right_col = st.columns([1, 1.2], gap="large")
@@ -51,18 +56,33 @@ def main() -> None:
                 temp_path = None
                 progress_bar = st.progress(0)
                 progress_text = st.empty()
+                ingestion_time_text = st.empty()
 
                 try:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
                         temp_file.write(uploaded_file.getbuffer())
                         temp_path = temp_file.name
 
+                    started_at = time.perf_counter()
+
+                    def format_duration(seconds: float) -> str:
+                        total_seconds = max(0, int(round(seconds)))
+                        minutes, seconds_part = divmod(total_seconds, 60)
+                        hours, minutes_part = divmod(minutes, 60)
+                        if hours:
+                            return f"{hours}h {minutes_part}m {seconds_part}s"
+                        if minutes_part:
+                            return f"{minutes_part}m {seconds_part}s"
+                        return f"{seconds_part}s"
+
                     def update_ingestion_progress(stage: str, processed: int, total: int, message: str) -> None:
                         if total <= 0:
                             progress_bar.progress(0)
                         else:
                             progress_bar.progress(min(processed / total, 1.0))
+                        elapsed = format_duration(time.perf_counter() - started_at)
                         progress_text.caption(message)
+                        ingestion_time_text.caption(f"Elapsed time: {elapsed}")
 
                     result = ingest_book(
                         temp_path,
@@ -70,10 +90,12 @@ def main() -> None:
                         progress_callback=update_ingestion_progress,
                     )
 
+                    elapsed = format_duration(time.perf_counter() - started_at)
                     progress_bar.progress(1.0)
                     progress_text.caption(f"Finished indexing {result['chunk_count']} chunks.")
+                    ingestion_time_text.caption(f"Total ingestion time: {elapsed}")
                     st.success(
-                        f"Indexed '{result['book_title']}' with {result['chunk_count']} chunks."
+                        f"Indexed '{result['book_title']}' with {result['chunk_count']} chunks in {elapsed}."
                     )
                 except Exception as exc:
                     st.error(f"Book ingestion failed: {exc}")

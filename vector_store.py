@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Optional
 from pinecone import ServerlessSpec
 from pinecone.grpc import PineconeGRPC as Pinecone
 
-from embeddings import embedding_dimension
+from embeddings import MODEL_NAME, embedding_dimension
 from utils import batched, require_env, slugify
 
 
@@ -13,9 +13,6 @@ BOOK_REGISTRY_NAMESPACE = "__books__"
 UPSERT_BATCH_SIZE = 100
 DEFAULT_PINECONE_CLOUD = "aws"
 DEFAULT_PINECONE_REGION = "us-east-1"
-BOOK_REGISTRY_SENTINEL_VALUE = 1e-12
-
-
 def get_index():
     api_key = require_env("PINECONE_API_KEY")
     index_name = require_env("PINECONE_INDEX_NAME")
@@ -42,13 +39,16 @@ def ensure_index(client, index_name: str) -> None:
 
 def _book_registry_vector(book_title: str) -> Dict:
     vector_dimension = embedding_dimension()
+    values = [0.0] * vector_dimension
+    values[0] = 1.0
     return {
         "id": f"book::{slugify(book_title)}",
         # Pinecone rejects dense vectors that are entirely zero.
-        "values": [BOOK_REGISTRY_SENTINEL_VALUE] * vector_dimension,
+        "values": values,
         "metadata": {
             "book": book_title,
             "kind": "book_registry",
+            "embedding_model": MODEL_NAME,
         },
     }
 
@@ -99,7 +99,10 @@ def query_chunks(
         top_k=top_k,
         namespace=namespace,
         include_metadata=True,
-        filter={"book": {"$eq": book_filter}},
+        filter={
+            "book": {"$eq": book_filter},
+            "embedding_model": {"$eq": MODEL_NAME},
+        },
     )
 
     matches = getattr(response, "matches", None) or response.get("matches", [])
@@ -140,7 +143,8 @@ def get_all_books() -> List[str]:
     for vector in vectors.values():
         metadata = getattr(vector, "metadata", None) or vector.get("metadata", {})
         book_title = metadata.get("book")
-        if book_title:
+        embedding_model = metadata.get("embedding_model")
+        if book_title and embedding_model == MODEL_NAME:
             books.append(book_title)
 
     return sorted(set(books), key=str.lower)
